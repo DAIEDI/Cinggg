@@ -162,6 +162,12 @@
     .seal { text-align: center; color: #c28dc8; margin-top: 18px; font-size: 27px; }
     .confetti { position: fixed; left: 50%; top: 48%; z-index: 50; pointer-events: none; color: var(--c, #ba7cdb); font-size: var(--size, 17px); animation: pop-heart .9s ease-out forwards; }
 
+    .music-toggle { position: fixed; right: 16px; bottom: 16px; z-index: 120; width: 46px; height: 46px; border: 1px solid rgba(255,255,255,.9); border-radius: 50%; background: rgba(255,255,255,.85); color: #8747b1; font-size: 20px; box-shadow: 0 8px 22px rgba(107,53,138,.2); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); display: grid; place-items: center; animation: rise-in .6s var(--ease) both; }
+    .music-toggle[hidden] { display: none; }
+    .music-toggle.is-playing span { display: inline-block; animation: note-bob 1.6s ease-in-out infinite; }
+    .music-toggle:not(.is-playing) { opacity: .6; text-decoration: line-through; }
+    @keyframes note-bob { 0%,100% { transform: translateY(0) rotate(-6deg); } 50% { transform: translateY(-3px) rotate(6deg); } }
+
     @keyframes scene-enter { from { opacity: 0; transform: translateY(26px) scale(.97); } to { opacity: 1; transform: none; } }
     @keyframes scene-exit { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-18px) scale(.97); } }
     @keyframes rise-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
@@ -187,13 +193,6 @@
       .footer-note { display: none; }
       .letter-paper { padding-top: 42px; }
       .letter-content { font-size: 15px; }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
-      .stem-draw { stroke-dashoffset: 0; }
-      .flower-head { opacity: 1; transform: scale(1); }
-      .bouquet-wrap { transform: none; opacity: 1; }
-      .letter-paper { transform: none; }
     }
   </style>
 </head>
@@ -297,6 +296,10 @@
     </section>
   </main>
 
+  <!-- Background music starts on the first tap because browsers block autoplay with sound. -->
+  <audio id="bg-music" loop preload="auto"></audio>
+  <button class="music-toggle" id="music-toggle" type="button" aria-label="Pause music" hidden><span aria-hidden="true">&#9834;</span></button>
+
   <!-- THE LETTER: Edit the text here to make it personal. -->
   <div class="letter-backdrop" id="letter-backdrop" aria-hidden="true">
     <article class="letter-paper" role="dialog" aria-modal="true" aria-labelledby="letter-title" tabindex="-1">
@@ -310,7 +313,7 @@
         <p>If I could give you flowers every single day, I would. But until then, here's a bouquet that never fades, and a reminder that my love for you isn't going anywhere.</p>
         <p>I love you. Today, tomorrow, and in all the little tomorrows after that. ♡</p>
       </div>
-      <div class="signature">Forever yours,<br /><span id="sender-name">Your Nieniell</span></div>
+      <div class="signature">Forever yours,<br /><span id="sender-name">Your favorite person</span></div>
       <div class="seal" aria-hidden="true">♡</div>
     </article>
   </div>
@@ -328,7 +331,10 @@
     const SETTINGS = {
       firstGif: EMBEDDED_GIFS.one,
       secondGif: EMBEDDED_GIFS.two,
-      senderName: "Your favorite person"
+      senderName: "Your favorite person",
+      song: "song.mp3",      // music file uploaded next to index.html
+      songStart: 0,          // seconds into the song to begin
+      songVolume: .6         // 0 to 1
     };
 
     // Load GIFs when provided. If an image fails, keep the built-in heart.
@@ -378,7 +384,7 @@
       if (isSwitching || current === next) return;
       isSwitching = true;
       current.classList.add('is-leaving');
-      const exitMs = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 380;
+      const exitMs = 380;
       setTimeout(() => {
         current.classList.remove('is-active', 'is-leaving');
         next.classList.add('is-active');
@@ -389,7 +395,6 @@
     }
 
     function burstHearts(count = 17) {
-      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
       const icons = ['♥', '♡', '✦', '✿'];
       for (let i = 0; i < count; i++) {
         const heart = document.createElement('span');
@@ -534,6 +539,37 @@
           tabbables[0].focus();
         }
       }
+    });
+
+    // Start the song on the first tap anywhere, fading the volume in gently.
+    const music = document.getElementById('bg-music');
+    const musicBtn = document.getElementById('music-toggle');
+    function setMusicState(playing) {
+      musicBtn.classList.toggle('is-playing', playing);
+      musicBtn.setAttribute('aria-label', playing ? 'Pause music' : 'Play music');
+    }
+    function startMusic() {
+      document.removeEventListener('pointerdown', startMusic, true);
+      document.removeEventListener('keydown', startMusic, true);
+      music.src = SETTINGS.song;
+      music.currentTime = SETTINGS.songStart;
+      music.volume = 0;
+      music.play().then(() => {
+        musicBtn.hidden = false;
+        setMusicState(true);
+        const fade = setInterval(() => {
+          music.volume = Math.min(SETTINGS.songVolume, music.volume + .05);
+          if (music.volume >= SETTINGS.songVolume) clearInterval(fade);
+        }, 120);
+      }).catch(() => {});
+    }
+    if (SETTINGS.song) {
+      document.addEventListener('pointerdown', startMusic, true);
+      document.addEventListener('keydown', startMusic, true);
+    }
+    musicBtn.addEventListener('click', () => {
+      if (music.paused) music.play().then(() => setMusicState(true)).catch(() => {});
+      else { music.pause(); setMusicState(false); }
     });
   </script>
 </body>
